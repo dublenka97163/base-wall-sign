@@ -125,11 +125,11 @@ const Canvas = () => {
     [draftStroke, localStrokes, pendingStrokes, wallStrokes]
   );
 
-  const redraw = useCallback(async () => {
+  const redraw = useCallback(() => {
     if (!canvasRef.current || !logo) return;
     const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
-    await drawWallLayers(ctx, allStrokes, logo, {
+    drawWallLayers(ctx, allStrokes, logo, {
       width: CANVAS_SIZE,
       height: CANVAS_SIZE,
     });
@@ -261,9 +261,18 @@ const Canvas = () => {
   };
 
   const castWall = async () => {
+    if (!canvasRef.current) return;
     setIsCasting(true);
     try {
-      const url = new URL("/api/wall", window.location.href).toString();
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvasRef.current!.toBlob(resolve, "image/png")
+      );
+      if (!blob) {
+        setStatus("Failed to prepare wall image.");
+        return;
+      }
+      const file = new File([blob], "base-wall.png", { type: "image/png" });
+      const url = URL.createObjectURL(file);
       const composer = new URL("https://warpcast.com/~/compose");
       composer.searchParams.append(
         "text",

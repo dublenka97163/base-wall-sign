@@ -33,7 +33,7 @@ export const drawStroke = (
   ctx.stroke();
 };
 
-export const drawWallLayers = async (
+export const drawWallLayers = (
   ctx: CanvasRenderingContext2D,
   strokes: Stroke[],
   logo: CanvasImageSource,
