@@ -1,3 +1,5 @@
+const DEFAULT_CONTRACT = "0x4592A83E576E1031e9F53a321f6BD0ea28Bc0aF5";
+
 const requiredEnv = (name: string, fallback?: string) => {
   const value = process.env[name] ?? fallback;
   if (!value) {
@@ -7,7 +9,7 @@ const requiredEnv = (name: string, fallback?: string) => {
 };
 
 export const getContractAddress = () =>
-  requiredEnv("NEXT_PUBLIC_CONTRACT_ADDRESS");
+  requiredEnv("NEXT_PUBLIC_CONTRACT_ADDRESS", DEFAULT_CONTRACT);
 
 export const getRpcUrl = () =>
   requiredEnv(
