@@ -1,4 +1,10 @@
-import { createPublicClient, hexToBytes, http, type Hex } from "viem";
+import {
+  createPublicClient,
+  hexToBytes,
+  http,
+  parseEventLogs,
+  type Hex,
+} from "viem";
 import { base, baseSepolia } from "viem/chains";
 import { getChainId, getContractAddress, getRpcUrl } from "./env";
 import { contractAbi } from "./contract";
@@ -20,14 +26,12 @@ const client = createPublicClient({
   transport: http(getRpcUrl()),
 });
 
-// IMPORTANT: set this to your deploy block (Base mainnet)
 const DEFAULT_DEPLOY_BLOCK = 40425685n;
 
 const getDeployBlock = () => {
   const raw = process.env.NEXT_PUBLIC_DEPLOY_BLOCK;
-  if (!raw) return DEFAULT_DEPLOY_BLOCK;
   try {
-    return BigInt(raw);
+    return raw ? BigInt(raw) : DEFAULT_DEPLOY_BLOCK;
   } catch {
     return DEFAULT_DEPLOY_BLOCK;
   }
@@ -37,51 +41,52 @@ export const fetchSignatureEvents = async (
   width: number,
   height: number
 ): Promise<SignatureEvent[]> => {
-  let logs: Awaited<ReturnType<typeof client.getLogs>> = [];
+  let logs = [];
 
   try {
-    // Typed getLogs: viem will decode args correctly
     logs = await client.getLogs({
       address: getContractAddress() as `0x${string}`,
-      event: {
-        type: "event",
-        name: "Signed",
-        inputs: contractAbi.find((x) => x.type === "event" && x.name === "Signed")!.inputs,
-      },
       fromBlock: getDeployBlock(),
       toBlock: "latest",
     });
   } catch (e) {
-    console.error("fetchSignatureEvents:getLogs failed", e);
+    console.error("getLogs failed", e);
     return [];
   }
 
-  // logs are now typed with args, no parseEventLogs needed
+  const events = parseEventLogs({
+    abi: contractAbi,
+    logs,
+    eventName: "Signed",
+  });
+
   const deduped = new Map<string, SignatureEvent>();
 
-  for (const log of logs) {
+  for (const log of events) {
     const key = `${log.transactionHash}-${log.logIndex}`;
     if (deduped.has(key)) continue;
 
-    // viem typed args
-    const signatureData = (log.args as any).signatureData as Hex;
-    const signer = (log.args as any).signer as `0x${string}`;
-    const tokenId = (log.args as any).tokenId as bigint;
-
-    const decoded = decodeSignature(hexToBytes(signatureData), width, height);
+    const signatureData = log.args.signatureData as Hex;
+    const decoded = decodeSignature(
+      hexToBytes(signatureData),
+      width,
+      height
+    );
 
     deduped.set(key, {
-      signer,
-      tokenId,
+      signer: log.args.signer,
+      tokenId: log.args.tokenId,
       signature: decoded,
-      transactionHash: log.transactionHash as `0x${string}`,
+      transactionHash: log.transactionHash,
       logIndex: Number(log.logIndex),
-      blockNumber: log.blockNumber ?? 0n,
+      blockNumber: log.blockNumber,
     });
   }
 
   return Array.from(deduped.values()).sort((a, b) => {
-    if (a.blockNumber === b.blockNumber) return a.logIndex - b.logIndex;
+    if (a.blockNumber === b.blockNumber) {
+      return a.logIndex - b.logIndex;
+    }
     return a.blockNumber > b.blockNumber ? 1 : -1;
   });
 };
