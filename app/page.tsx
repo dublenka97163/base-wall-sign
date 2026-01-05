@@ -9,20 +9,20 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  useAccount,
-  useConnect,
-  useDisconnect,
-  usePublicClient,
-  useWriteContract,
-} from "wagmi";
-import { bytesToHex } from "viem";
+  bytesToHex,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  http,
+} from "viem";
+import { base, baseSepolia } from "viem/chains";
 import { Providers } from "./providers";
 import { useBaseLogo } from "@/lib/useBaseLogo";
 import { Stroke, encodeSignature } from "@/lib/signatureEncoding";
 import { drawWallLayers } from "@/lib/draw";
 import { fetchSignatureEvents } from "@/lib/events";
 import { contractAbi } from "@/lib/contract";
-import { getContractAddress } from "@/lib/env";
+import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 
 const CANVAS_SIZE = 820;
 
@@ -99,12 +99,22 @@ const Canvas = () => {
   const [isLoadingWall, setIsLoadingWall] = useState(false);
   const pointerStroke = useRef<Stroke | null>(null);
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+  const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
+    null
+  );
 
-  const { address, isConnected } = useAccount();
-  const { connect, connectors, isPending: connecting } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { writeContractAsync, isPending: signing } = useWriteContract();
-  const publicClient = usePublicClient();
+  const chainId = getChainId();
+  const chain = chainId === base.id ? base : baseSepolia;
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain,
+        transport: http(getRpcUrl()),
+      }),
+    [chain]
+  );
 
   const allStrokes = useMemo(
     () => [
@@ -147,6 +157,25 @@ const Canvas = () => {
   useEffect(() => {
     syncWall();
   }, [syncWall]);
+
+  useEffect(() => {
+    let active = true;
+    import("@farcaster/mini-apps-sdk")
+      .then(({ MiniApp }) => {
+        if (!active) return;
+        const sdk = new MiniApp();
+        sdk.actions.ready().catch((err: unknown) => {
+          console.warn("Mini app ready signal failed", err);
+        });
+      })
+      .catch((err) => {
+        console.warn("Mini app SDK failed to load", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const pointerPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -192,41 +221,56 @@ const Canvas = () => {
       setStatus("Draw your signature first.");
       return;
     }
-    if (!isConnected) {
-      setStatus("Connect your wallet to sign.");
+    const eth = typeof window !== "undefined" ? (window as any).ethereum : null;
+    if (!eth) {
+      setStatus("Wallet not available in this environment.");
       return;
     }
     if (!canvasRef.current) return;
 
     try {
-      const encoded = encodeSignature(
-        localStrokes,
-        CANVAS_SIZE,
-        CANVAS_SIZE
-      );
-      const hash = await writeContractAsync({
+      setSigning(true);
+      const encoded = encodeSignature(localStrokes, CANVAS_SIZE, CANVAS_SIZE);
+      if (!walletClientRef.current) {
+        walletClientRef.current = createWalletClient({
+          chain,
+          transport: custom(eth),
+        });
+      }
+      const addresses: string[] = await eth.request({
+        method: "eth_requestAccounts",
+      });
+      const from = addresses[0];
+      setWalletAddress(from);
+
+      const currentChainId = await walletClientRef.current.getChainId();
+      if (currentChainId !== chain.id) {
+        await walletClientRef.current.switchChain({ id: chain.id });
+      }
+
+      const hash = await walletClientRef.current.writeContract({
         address: getContractAddress() as `0x${string}`,
         abi: contractAbi,
         functionName: "sign",
         args: [bytesToHex(encoded)],
+        chain,
+        account: from as `0x${string}`,
       });
 
       setPendingStrokes((prev) => [...prev, ...localStrokes]);
       setLocalStrokes([]);
       setStatus("Submitting signature...");
 
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash });
-        await syncWall();
-        setPendingStrokes([]);
-        setStatus("Signature confirmed onchain!");
-      } else {
-        setStatus("Waiting for confirmation...");
-      }
+      await publicClient.waitForTransactionReceipt({ hash });
+      await syncWall();
+      setPendingStrokes([]);
+      setStatus("Signature confirmed onchain!");
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to send transaction.";
       setStatus(message);
+    } finally {
+      setSigning(false);
     }
   };
 
@@ -247,13 +291,31 @@ const Canvas = () => {
     }
   };
 
-  const connectWallet = () => {
-    const primary = connectors?.[0];
-    if (primary) {
-      connect({ connector: primary });
+  const connectWallet = async () => {
+    const eth = typeof window !== "undefined" ? (window as any).ethereum : null;
+    if (!eth) {
+      setStatus("Wallet not available in this environment.");
       return;
     }
-    setStatus("No wallet connector detected.");
+    try {
+      const accounts: string[] = await eth.request({
+        method: "eth_requestAccounts",
+      });
+      if (accounts.length === 0) {
+        setStatus("No accounts returned from wallet.");
+        return;
+      }
+      walletClientRef.current = createWalletClient({
+        chain,
+        transport: custom(eth),
+      });
+      setWalletAddress(accounts[0]);
+      setStatus("Wallet connected.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to connect wallet.";
+      setStatus(message);
+    }
   };
 
   return (
@@ -290,21 +352,24 @@ const Canvas = () => {
               Draw on the Base logo, submit onchain, and mint your wall NFT.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            {isConnected ? (
+            <div style={{ display: "flex", gap: 10 }}>
+            {walletAddress ? (
               <ActionButton
                 variant="secondary"
-                label={`Connected: ${address?.slice(0, 6)}...${address?.slice(
+                label={`Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(
                   -4
                 )}`}
-                onClick={() => disconnect()}
+                onClick={() => {
+                  walletClientRef.current = null;
+                  setWalletAddress(null);
+                  setStatus("Disconnected wallet.");
+                }}
               />
             ) : (
               <ActionButton
                 variant="primary"
-                label={connecting ? "Connecting..." : "Connect Wallet"}
+                label="Connect Wallet"
                 onClick={connectWallet}
-                disabled={connecting}
               />
             )}
           </div>
