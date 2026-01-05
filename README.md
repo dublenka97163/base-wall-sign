@@ -13,7 +13,7 @@ Stack:
 ## Getting started
 
 1. Copy `.env.example` to `.env.local` and set:
-   - `NEXT_PUBLIC_CONTRACT_ADDRESS` (defaults to the deployed Base mainnet contract `0x4592A83E576E1031e9F53a321f6BD0ea28Bc0aF5`).
+   - `NEXT_PUBLIC_CONTRACT_ADDRESS` to your deployed `BaseWallSign` contract.
    - `NEXT_PUBLIC_BASE_RPC` to a Base RPC endpoint.
    - Optionally `NEXT_PUBLIC_CHAIN_ID` (defaults to Base mainnet).
 2. Install dependencies:
