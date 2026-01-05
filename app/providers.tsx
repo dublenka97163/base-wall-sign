@@ -12,7 +12,8 @@ const chain = getChainId() === base.id ? base : baseSepolia;
 const config = createConfig({
   chains: [chain],
   transports: {
-    [chain.id]: http(getRpcUrl()),
+    [base.id]: http(getRpcUrl()),
+    [baseSepolia.id]: http(getRpcUrl()),
   },
   connectors: [injected({ target: "metaMask" }), injected({ target: "walletConnect" }), injected()],
 });
