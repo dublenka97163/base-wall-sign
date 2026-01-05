@@ -16,6 +16,7 @@ Stack:
    - `NEXT_PUBLIC_CONTRACT_ADDRESS` (defaults to the deployed Base mainnet contract `0x4592A83E576E1031e9F53a321f6BD0ea28Bc0aF5`).
    - `NEXT_PUBLIC_BASE_RPC` to a Base RPC endpoint.
    - Optionally `NEXT_PUBLIC_CHAIN_ID` (defaults to Base mainnet).
+   - `NEXT_PUBLIC_APP_URL` to the deployed URL (used in `.well-known/farcaster.json`).
 2. Install dependencies:
    ```bash
    npm install

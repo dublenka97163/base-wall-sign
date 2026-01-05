@@ -9,6 +9,7 @@ export const miniAppConfig = {
   splashBackgroundColor: "#ffffff",
   homeUrl: appUrl,
   startUrl: `${appUrl}/`,
+  chainId: 8453,
 };
 
 export default miniAppConfig;

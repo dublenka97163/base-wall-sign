@@ -99,7 +99,6 @@ const Canvas = () => {
   const [isLoadingWall, setIsLoadingWall] = useState(false);
   const pointerStroke = useRef<Stroke | null>(null);
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
     null
@@ -241,7 +240,6 @@ const Canvas = () => {
         method: "eth_requestAccounts",
       });
       const from = addresses[0];
-      setWalletAddress(from);
 
       const currentChainId = await walletClientRef.current.getChainId();
       if (currentChainId !== chain.id) {
@@ -291,33 +289,6 @@ const Canvas = () => {
     }
   };
 
-  const connectWallet = async () => {
-    const eth = typeof window !== "undefined" ? (window as any).ethereum : null;
-    if (!eth) {
-      setStatus("Wallet not available in this environment.");
-      return;
-    }
-    try {
-      const accounts: string[] = await eth.request({
-        method: "eth_requestAccounts",
-      });
-      if (accounts.length === 0) {
-        setStatus("No accounts returned from wallet.");
-        return;
-      }
-      walletClientRef.current = createWalletClient({
-        chain,
-        transport: custom(eth),
-      });
-      setWalletAddress(accounts[0]);
-      setStatus("Wallet connected.");
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to connect wallet.";
-      setStatus(message);
-    }
-  };
-
   return (
     <div
       style={{
@@ -351,27 +322,6 @@ const Canvas = () => {
             <p style={{ margin: "4px 0 0", color: "#475569" }}>
               Draw on the Base logo, submit onchain, and mint your wall NFT.
             </p>
-          </div>
-            <div style={{ display: "flex", gap: 10 }}>
-            {walletAddress ? (
-              <ActionButton
-                variant="secondary"
-                label={`Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(
-                  -4
-                )}`}
-                onClick={() => {
-                  walletClientRef.current = null;
-                  setWalletAddress(null);
-                  setStatus("Disconnected wallet.");
-                }}
-              />
-            ) : (
-              <ActionButton
-                variant="primary"
-                label="Connect Wallet"
-                onClick={connectWallet}
-              />
-            )}
           </div>
         </div>
 
