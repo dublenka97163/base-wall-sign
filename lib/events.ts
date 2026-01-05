@@ -83,7 +83,12 @@ export const fetchSignatureEvents = async (
     });
   }
 
-  return Array.from(deduped.values()).sort((a, b) => {
+  // ОБЯЗАТЕЛЬНЫЙ ФИКС №2
+  const safeEvents = Array.from(deduped.values()).filter(
+    (e) => Array.isArray(e.signature) && e.signature.length > 0
+  );
+
+  return safeEvents.sort((a, b) => {
     if (a.blockNumber === b.blockNumber) {
       return a.logIndex - b.logIndex;
     }
