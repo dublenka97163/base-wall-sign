@@ -158,22 +158,10 @@ const Canvas = () => {
   }, [syncWall]);
 
   useEffect(() => {
-    let active = true;
-    import("@farcaster/mini-apps-sdk")
-      .then(({ MiniApp }) => {
-        if (!active) return;
-        const sdk = new MiniApp();
-        sdk.actions.ready().catch((err: unknown) => {
-          console.warn("Mini app ready signal failed", err);
-        });
-      })
-      .catch((err) => {
-        console.warn("Mini app SDK failed to load", err);
-      });
-
-    return () => {
-      active = false;
-    };
+    const sdk = (globalThis as unknown as { miniApp?: { actions?: { ready?: () => Promise<void> } } }).miniApp;
+    sdk?.actions?.ready?.().catch((err: unknown) => {
+      console.warn("Mini app ready signal failed", err);
+    });
   }, []);
 
   const pointerPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
