@@ -1,11 +1,9 @@
-import { Abi } from "viem";
-
 export const BASE_LOGO_ASSET_PATH = "/assets/base-logo.svg";
 
 export const BASE_CHAIN_ID = 8453;
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
-export const contractAbi: Abi = [
+export const contractAbi = [
   {
     type: "event",
     name: "Signed",
@@ -37,4 +35,4 @@ export const contractAbi: Abi = [
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
-];
+ ] as const;

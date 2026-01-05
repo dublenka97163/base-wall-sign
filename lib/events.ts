@@ -1,4 +1,10 @@
-import { createPublicClient, hexToBytes, http } from "viem";
+import {
+  createPublicClient,
+  hexToBytes,
+  http,
+  parseEventLogs,
+  type Hex,
+} from "viem";
 import { base, baseSepolia } from "viem/chains";
 import { getChainId, getContractAddress, getRpcUrl } from "./env";
 import { contractAbi } from "./contract";
@@ -24,15 +30,16 @@ export const fetchSignatureEvents = async (
   width: number,
   height: number
 ): Promise<SignatureEvent[]> => {
-  const events = await client.getLogs({
+  const logs = await client.getLogs({
     address: getContractAddress() as `0x${string}`,
-    event: {
-      type: "event",
-      name: "Signed",
-      inputs: contractAbi[0]?.type === "event" ? contractAbi[0].inputs : [],
-    },
     fromBlock: "earliest",
     toBlock: "latest",
+  });
+
+  const events = parseEventLogs({
+    abi: contractAbi,
+    logs,
+    eventName: "Signed",
   });
 
   const deduped = new Map<string, SignatureEvent>();
@@ -41,12 +48,12 @@ export const fetchSignatureEvents = async (
     const key = `${log.transactionHash}-${log.logIndex}`;
     if (deduped.has(key)) return;
 
-    const signatureData = log.data as `0x${string}`;
+    const signatureData = log.args.signatureData as Hex;
     const decoded = decodeSignature(hexToBytes(signatureData), width, height);
 
     deduped.set(key, {
-      signer: log.args?.signer as `0x${string}`,
-      tokenId: log.args?.tokenId as bigint,
+      signer: log.args.signer,
+      tokenId: log.args.tokenId,
       signature: decoded,
       transactionHash: log.transactionHash,
       logIndex: Number(log.logIndex),
