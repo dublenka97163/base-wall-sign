@@ -8,7 +8,7 @@ export type RenderOptions = {
 export const drawStroke = (
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
-  color = "#0f172a"
+  color = "#0a0b0d"
 ) => {
   if (
     !stroke ||
@@ -69,9 +69,9 @@ export const drawWallLayers = (
   ctx.fillStyle = "#eef0f3";
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Strokes
+  // 2. Strokes (цвет берём из данных)
   strokes.forEach((stroke) => {
-    drawStroke(ctx, stroke);
+    drawStroke(ctx, stroke, stroke.color ?? "#0a0b0d");
   });
 
   // 3. Logo (всегда читаемое)
