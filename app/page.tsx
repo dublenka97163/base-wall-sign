@@ -24,6 +24,7 @@ import { drawWallLayers } from "@/lib/draw";
 import { fetchWallSignatures } from "@/lib/subgraph";
 import { contractAbi } from "@/lib/contract";
 import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
+import { getWallRange } from "@/lib/wall";
 
 const CANVAS_SIZE = 820;
 
@@ -111,6 +112,7 @@ const Canvas = () => {
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawLocked, setDrawLocked] = useState(false);
+  const drawLockedRef = useRef(false);
 
   const [status, setStatus] = useState<string | null>(null);
   const [isCasting, setIsCasting] = useState(false);
@@ -160,13 +162,55 @@ const Canvas = () => {
     redraw();
   }, [redraw]);
 
+  async function fetchLatestTokenId() {
+    const res = await fetch(process.env.NEXT_PUBLIC_SUBGRAPH_URL!, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `
+          query {
+            signeds(orderBy: tokenId, orderDirection: desc, first: 1) {
+              tokenId
+            }
+          }
+        `,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Subgraph fetch failed");
+    }
+
+    const json = await res.json();
+    return Number(json?.data?.signeds?.[0]?.tokenId ?? 0);
+  }
+
   /* === ЗАГРУЗКА СТЕНЫ ЧЕРЕЗ SUBGRAPH === */
   const loadWall = useCallback(async () => {
     try {
       setStatus("Syncing wall...");
+
+      const latestTokenId = await fetchLatestTokenId();
+      if (!latestTokenId) {
+        setWallStrokes([]);
+        setStatus(null);
+        return;
+      }
+
+      const { from, to } = getWallRange(latestTokenId);
+
+      // Сейчас fetchWallSignatures() без аргументов — чтобы ничего не сломать.
+      // Мы фильтруем подписи по tokenId здесь.
+      // Когда обновишь lib/subgraph.ts до fetchWallSignatures(from, to),
+      // заменишь следующую строку на: const signatures = await fetchWallSignatures(from, to);
       const signatures = await fetchWallSignatures();
 
-      const strokes = signatures.map((s: any) => {
+      const inRange = signatures.filter((s: any) => {
+        const id = Number(s?.tokenId ?? 0);
+        return id >= from && id <= to;
+      });
+
+      const strokes = inRange.map((s: any) => {
         const data =
           typeof s.signatureData === "string"
             ? hexToBytes(s.signatureData)
@@ -177,7 +221,8 @@ const Canvas = () => {
 
       setWallStrokes(strokes.flat());
       setStatus(null);
-    } catch {
+    } catch (e) {
+      console.error(e);
       setStatus("Failed to load wall");
     }
   }, []);
@@ -207,7 +252,7 @@ const Canvas = () => {
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
 
-    if (drawLocked) {
+    if (drawLockedRef.current || drawLocked) {
       setStatus("Limit reached. Clear or Confirm & Sign.");
       return;
     }
@@ -226,13 +271,14 @@ const Canvas = () => {
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !pointerStroke.current) return;
-    if (drawLocked) return;
+    if (drawLockedRef.current || drawLocked) return;
 
     const total =
       localStrokes.reduce((sum, s) => sum + s.points.length, 0) +
       pointerStroke.current.points.length;
 
     if (total >= MAX_POINTS_TOTAL) {
+      drawLockedRef.current = true;
       setDrawLocked(true);
       setStatus("Limit reached. Clear or Confirm & Sign.");
       return;
@@ -262,6 +308,7 @@ const Canvas = () => {
     setLocalStrokes([]);
     setDraftStroke(null);
     pointerStroke.current = null;
+    drawLockedRef.current = false;
     setDrawLocked(false);
     setStatus(null);
   };
@@ -312,6 +359,7 @@ const Canvas = () => {
 
       setPendingStrokes((prev) => [...prev, ...localStrokes]);
       setLocalStrokes([]);
+      drawLockedRef.current = false;
       setDrawLocked(false);
       setStatus("Submitting signature...");
 
