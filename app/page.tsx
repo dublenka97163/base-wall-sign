@@ -466,7 +466,7 @@ const Canvas = () => {
           onPointerLeave={handlePointerUp}
         />
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "column" }}>
           <ActionButton
             variant="secondary"
             label="Clear"
