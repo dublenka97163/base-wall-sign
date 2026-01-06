@@ -436,12 +436,9 @@ const Canvas = () => {
         <div
           style={{
             display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",     // ← идеальное центрирование кнопок
             gap: 12,
+            flexDirection: "row",
             width: "100%",
-            maxWidth: `${CANVAS_SIZE}px`,
-            margin: "0 auto",             // ← дополнительная гарантия центрирования блока
           }}
         >
           <ActionButton
