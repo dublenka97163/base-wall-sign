@@ -57,12 +57,6 @@ const buttonStyles = {
     transition: "transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
     boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
     cursor: "pointer",
-    minWidth: 140,
-  },
-  primary: {
-    background: "linear-gradient(90deg, #1c72ff, #0b4edb)",
-    color: "#ffffff",
-    border: "none",
   },
   pressed: {
     transform: "translateY(1px) scale(0.99)",
@@ -78,7 +72,6 @@ const ActionButton = ({
   label,
   onClick,
   disabled,
-  variant = "primary",
   buttonStyle = {},
 }: ButtonProps) => {
   const [pressed, setPressed] = useState(false);
@@ -88,9 +81,8 @@ const ActionButton = ({
     <button
       style={{
         ...buttonStyles.base,
-        flex: "1",
-        minWidth: 0,
-        ...(variant === "primary" ? buttonStyles.primary : {}),
+        flex: "1 1 220px",               // ← минимум ~220px, растягиваются равномерно, wrap на мобильных
+        boxSizing: "border-box",
         ...buttonStyle,
         ...(hovered && !disabled
           ? {
@@ -444,30 +436,31 @@ const Canvas = () => {
         <div
           style={{
             display: "flex",
-            gap: 12,
-            flexDirection: "row",
             flexWrap: "wrap",
+            justifyContent: "center",     // ← идеальное центрирование кнопок
+            gap: 12,
             width: "100%",
             maxWidth: `${CANVAS_SIZE}px`,
-            margin: "0 auto",
+            margin: "0 auto",             // ← дополнительная гарантия центрирования блока
           }}
         >
           <ActionButton
-            variant="secondary"
             label="Clear"
             onClick={clearLocal}
             disabled={!localStrokes.length}
             buttonStyle={{ background: "#ffffff" }}
           />
           <ActionButton
-            variant="primary"
             label={signing ? "Signing..." : "Confirm & Sign"}
             onClick={onSign}
             disabled={signing || !localStrokes.length}
-            buttonStyle={{ background: "#0000ff" }}
+            buttonStyle={{
+              background: "#0000ff",
+              color: "#ffffff",
+              border: "none",
+            }}
           />
           <ActionButton
-            variant="secondary"
             label={isCasting ? "Preparing..." : "Cast Wall"}
             onClick={castWall}
             disabled={isCasting}
