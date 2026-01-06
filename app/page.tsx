@@ -124,6 +124,7 @@ const Canvas = () => {
     null
   );
 
+  // usedPoints остаётся ТОЛЬКО как вспомогательный счётчик (не для старта)
   const usedPoints = useMemo(() => {
     const local = localStrokes.reduce((sum, s) => sum + s.points.length, 0);
     const draft = pointerStroke.current?.points.length ?? 0;
@@ -195,10 +196,7 @@ const Canvas = () => {
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
 
-    if (drawLocked) return;
-
-    if (usedPoints >= MAX_POINTS_TOTAL) {
-      setDrawLocked(true);
+    if (drawLocked) {
       setStatus("Limit reached. Clear or Confirm & Sign.");
       return;
     }
