@@ -166,7 +166,7 @@ const Canvas = () => {
       const signatures = await fetchWallSignatures();
 
       const strokes = signatures.map((s: any) =>
-        decodeSignature(s.signatureData)
+        decodeSignature(s.signatureData, CANVAS_SIZE, CANVAS_SIZE)
       );
 
       setWallStrokes(strokes.flat());
