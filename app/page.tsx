@@ -203,7 +203,7 @@ const Canvas = () => {
       // Мы фильтруем подписи по tokenId здесь.
       // Когда обновишь lib/subgraph.ts до fetchWallSignatures(from, to),
       // заменишь следующую строку на: const signatures = await fetchWallSignatures(from, to);
-      const signatures = await fetchWallSignatures();
+      const signatures = await fetchWallSignatures(from, to);
 
       const inRange = signatures.filter((s: any) => {
         const id = Number(s?.tokenId ?? 0);
