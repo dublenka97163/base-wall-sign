@@ -442,22 +442,22 @@ const Canvas = () => {
           }}
         >
           <ActionButton
+            variant="secondary"
             label="Clear"
             onClick={clearLocal}
             disabled={!localStrokes.length}
-            buttonStyle={{ background: "#ffffff" }}
+            buttonStyle={{ background: "#ffffff", flex: "0 1 auto" }}
           />
           <ActionButton
+            variant="primary"
             label={signing ? "Signing..." : "Confirm & Sign"}
             onClick={onSign}
             disabled={signing || !localStrokes.length}
-            buttonStyle={{
-              background: "#0000ff",
-              color: "#ffffff",
-              border: "none",
+            buttonStyle={{ background: "#0000ff", flex: "1 1 0" }}
             }}
           />
           <ActionButton
+            variant="secondary"
             label={isCasting ? "Preparing..." : "Cast Wall"}
             onClick={castWall}
             disabled={isCasting}
@@ -465,6 +465,7 @@ const Canvas = () => {
               background: "#8A63D2",
               color: "#ffffff",
               border: "none",
+              flex: "1 1 0",
             }}
           />
         </div>
