@@ -1,5 +1,4 @@
 "use client";
-
 import {
   useCallback,
   useEffect,
@@ -27,7 +26,6 @@ import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 import { getWallRange } from "@/lib/wall";
 
 const CANVAS_SIZE = 820;
-
 const MAX_POINTS_PER_STROKE = 120;
 const MAX_POINTS_TOTAL = 600;
 
@@ -45,6 +43,7 @@ type ButtonProps = {
   onClick: () => void;
   disabled?: boolean;
   variant?: "primary" | "secondary";
+  buttonStyle?: React.CSSProperties;
 };
 
 const buttonStyles = {
@@ -55,7 +54,7 @@ const buttonStyles = {
     background: "#f8fafc",
     color: "#0f172a",
     fontWeight: 600,
-    transition: "transform 120ms ease, box-shadow 120ms ease",
+    transition: "transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
     boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
     cursor: "pointer",
     minWidth: 140,
@@ -80,13 +79,25 @@ const ActionButton = ({
   onClick,
   disabled,
   variant = "primary",
+  buttonStyle = {},
 }: ButtonProps) => {
   const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
   return (
     <button
       style={{
         ...buttonStyles.base,
+        flex: "1",
+        minWidth: 0,
         ...(variant === "primary" ? buttonStyles.primary : {}),
+        ...buttonStyle,
+        ...(hovered && !disabled
+          ? {
+              transform: "translateY(-2px)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+            }
+          : {}),
         ...(pressed ? buttonStyles.pressed : {}),
         ...(disabled ? buttonStyles.disabled : {}),
       }}
@@ -94,6 +105,8 @@ const ActionButton = ({
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onClick={onClick}
     >
       {label}
@@ -104,23 +117,18 @@ const ActionButton = ({
 const Canvas = () => {
   const logo = useBaseLogo();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
   const [localStrokes, setLocalStrokes] = useState<Stroke[]>([]);
   const [wallStrokes, setWallStrokes] = useState<Stroke[]>([]);
   const [pendingStrokes, setPendingStrokes] = useState<Stroke[]>([]);
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
-
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawLocked, setDrawLocked] = useState(false);
   const drawLockedRef = useRef(false);
-
   const [status, setStatus] = useState<string | null>(null);
   const [isCasting, setIsCasting] = useState(false);
   const [signing, setSigning] = useState(false);
-
   /* 🎨 текущий выбранный цвет */
   const [currentColor, setCurrentColor] = useState<string>("#0a0b0d");
-
   const pointerStroke = useRef<Stroke | null>(null);
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
     null
@@ -176,11 +184,9 @@ const Canvas = () => {
         `,
       }),
     });
-
     if (!res.ok) {
       throw new Error("Subgraph fetch failed");
     }
-
     const json = await res.json();
     return Number(json?.data?.signeds?.[0]?.tokenId ?? 0);
   }
@@ -189,36 +195,25 @@ const Canvas = () => {
   const loadWall = useCallback(async () => {
     try {
       setStatus("Syncing wall...");
-
       const latestTokenId = await fetchLatestTokenId();
       if (!latestTokenId) {
         setWallStrokes([]);
         setStatus(null);
         return;
       }
-
       const { from, to } = getWallRange(latestTokenId);
-
-      // Сейчас fetchWallSignatures() без аргументов — чтобы ничего не сломать.
-      // Мы фильтруем подписи по tokenId здесь.
-      // Когда обновишь lib/subgraph.ts до fetchWallSignatures(from, to),
-      // заменишь следующую строку на: const signatures = await fetchWallSignatures(from, to);
       const signatures = await fetchWallSignatures(from, to);
-
       const inRange = signatures.filter((s: any) => {
         const id = Number(s?.tokenId ?? 0);
         return id >= from && id <= to;
       });
-
       const strokes = inRange.map((s: any) => {
         const data =
           typeof s.signatureData === "string"
             ? hexToBytes(s.signatureData)
             : Uint8Array.from(s.signatureData);
-
         return decodeSignature(data, CANVAS_SIZE, CANVAS_SIZE);
       });
-
       setWallStrokes(strokes.flat());
       setStatus(null);
     } catch (e) {
@@ -229,12 +224,10 @@ const Canvas = () => {
 
   useEffect(() => {
     let cancelled = false;
-
     async function init() {
       if (cancelled) return;
       await loadWall();
     }
-
     init();
     return () => {
       cancelled = true;
@@ -251,12 +244,10 @@ const Canvas = () => {
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
-
     if (drawLockedRef.current || drawLocked) {
       setStatus("Limit reached. Clear or Confirm & Sign.");
       return;
     }
-
     const point = pointerPoint(event);
     pointerStroke.current = {
       points: [point],
@@ -272,20 +263,16 @@ const Canvas = () => {
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !pointerStroke.current) return;
     if (drawLockedRef.current || drawLocked) return;
-
     const total =
       localStrokes.reduce((sum, s) => sum + s.points.length, 0) +
       pointerStroke.current.points.length;
-
     if (total >= MAX_POINTS_TOTAL) {
       drawLockedRef.current = true;
       setDrawLocked(true);
       setStatus("Limit reached. Clear or Confirm & Sign.");
       return;
     }
-
     if (pointerStroke.current.points.length >= MAX_POINTS_PER_STROKE) return;
-
     const point = pointerPoint(event);
     pointerStroke.current.points.push(point);
     setDraftStroke({
@@ -318,36 +305,29 @@ const Canvas = () => {
       setStatus("Draw your signature first.");
       return;
     }
-
     const eth =
       typeof window !== "undefined" ? (window as any).ethereum : null;
     if (!eth) {
       setStatus("Wallet not available in this environment.");
       return;
     }
-
     try {
       setSigning(true);
-
       const encoded = encodeSignature(localStrokes, CANVAS_SIZE, CANVAS_SIZE);
-
       if (!walletClientRef.current) {
         walletClientRef.current = createWalletClient({
           chain,
           transport: custom(eth),
         });
       }
-
       const addresses: string[] = await eth.request({
         method: "eth_requestAccounts",
       });
       const from = addresses[0];
-
       const currentChainId = await walletClientRef.current.getChainId();
       if (currentChainId !== chain.id) {
         await walletClientRef.current.switchChain({ id: chain.id });
       }
-
       const hash = await walletClientRef.current.writeContract({
         address: getContractAddress() as `0x${string}`,
         abi: contractAbi,
@@ -356,13 +336,11 @@ const Canvas = () => {
         chain,
         account: from as `0x${string}`,
       });
-
       setPendingStrokes((prev) => [...prev, ...localStrokes]);
       setLocalStrokes([]);
       drawLockedRef.current = false;
       setDrawLocked(false);
       setStatus("Submitting signature...");
-
       await publicClient.waitForTransactionReceipt({ hash });
       await loadWall();
       setPendingStrokes([]);
@@ -427,7 +405,6 @@ const Canvas = () => {
             Draw on the Base logo, submit onchain, and mint your wall NFT.
           </p>
         </div>
-
         <div style={{ display: "flex", gap: 8 }}>
           {SIGN_COLORS.map((c) => (
             <button
@@ -447,7 +424,6 @@ const Canvas = () => {
             />
           ))}
         </div>
-
         <canvas
           ref={canvasRef}
           width={CANVAS_SIZE}
@@ -465,28 +441,43 @@ const Canvas = () => {
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
         />
-
-        <div style={{ display: "flex", gap: 12, flexDirection: "column" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexDirection: "row",
+            flexWrap: "wrap",
+            width: "100%",
+            maxWidth: `${CANVAS_SIZE}px`,
+            margin: "0 auto",
+          }}
+        >
           <ActionButton
             variant="secondary"
             label="Clear"
             onClick={clearLocal}
             disabled={!localStrokes.length}
+            buttonStyle={{ background: "#ffffff" }}
           />
           <ActionButton
             variant="primary"
             label={signing ? "Signing..." : "Confirm & Sign"}
             onClick={onSign}
             disabled={signing || !localStrokes.length}
+            buttonStyle={{ background: "#0000ff" }}
           />
           <ActionButton
             variant="secondary"
             label={isCasting ? "Preparing..." : "Cast Wall"}
             onClick={castWall}
             disabled={isCasting}
+            buttonStyle={{
+              background: "#8A63D2",
+              color: "#ffffff",
+              border: "none",
+            }}
           />
         </div>
-
         {status && (
           <div
             style={{
