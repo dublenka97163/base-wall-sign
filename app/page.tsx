@@ -18,9 +18,13 @@ import {
 import { base, baseSepolia } from "viem/chains";
 import { Providers } from "./providers";
 import { useBaseLogo } from "@/lib/useBaseLogo";
-import { Stroke, encodeSignature } from "@/lib/signatureEncoding";
+import {
+  Stroke,
+  encodeSignature,
+  decodeSignatureData,
+} from "@/lib/signatureEncoding";
 import { drawWallLayers } from "@/lib/draw";
-import { fetchSignatureEvents } from "@/lib/events";
+import { fetchWallSignatures } from "@/lib/subgraph";
 import { contractAbi } from "@/lib/contract";
 import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 
@@ -113,7 +117,6 @@ const Canvas = () => {
 
   const [status, setStatus] = useState<string | null>(null);
   const [isCasting, setIsCasting] = useState(false);
-  const [isLoadingWall, setIsLoadingWall] = useState(false);
   const [signing, setSigning] = useState(false);
 
   /* 🎨 текущий выбранный цвет */
@@ -123,13 +126,6 @@ const Canvas = () => {
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
     null
   );
-
-  // usedPoints остаётся ТОЛЬКО как вспомогательный счётчик (не для старта)
-  const usedPoints = useMemo(() => {
-    const local = localStrokes.reduce((sum, s) => sum + s.points.length, 0);
-    const draft = pointerStroke.current?.points.length ?? 0;
-    return local + draft;
-  }, [localStrokes]);
 
   const chainId = getChainId();
   const chain = chainId === base.id ? base : baseSepolia;
@@ -167,23 +163,36 @@ const Canvas = () => {
     redraw();
   }, [redraw]);
 
-  const syncWall = useCallback(async () => {
-    setIsLoadingWall(true);
+  /* === ЗАГРУЗКА СТЕНЫ ЧЕРЕЗ SUBGRAPH === */
+  const loadWall = useCallback(async () => {
     try {
-      const events = await fetchSignatureEvents(CANVAS_SIZE, CANVAS_SIZE);
-      const strokes = events.flatMap((event) => event.signature);
-      setWallStrokes(strokes);
-    } catch (err) {
-      console.error(err);
-      setStatus("Failed to load wall. Check RPC or contract address.");
-    } finally {
-      setIsLoadingWall(false);
+      setStatus("Syncing wall...");
+      const signatures = await fetchWallSignatures();
+
+      const strokes = signatures.map((s: any) =>
+        decodeSignatureData(s.signatureData)
+      );
+
+      setWallStrokes(strokes.flat());
+      setStatus(null);
+    } catch {
+      setStatus("Failed to load wall");
     }
   }, []);
 
   useEffect(() => {
-    syncWall();
-  }, [syncWall]);
+    let cancelled = false;
+
+    async function init() {
+      if (cancelled) return;
+      await loadWall();
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadWall]);
 
   const pointerPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -305,7 +314,7 @@ const Canvas = () => {
       setStatus("Submitting signature...");
 
       await publicClient.waitForTransactionReceipt({ hash });
-      await syncWall();
+      await loadWall();
       setPendingStrokes([]);
       setStatus("Signature confirmed onchain!");
     } catch (err: unknown) {
@@ -425,7 +434,7 @@ const Canvas = () => {
             variant="secondary"
             label={isCasting ? "Preparing..." : "Cast Wall"}
             onClick={castWall}
-            disabled={isCasting || isLoadingWall}
+            disabled={isCasting}
           />
         </div>
 
