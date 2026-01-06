@@ -166,9 +166,14 @@ const Canvas = () => {
       setStatus("Syncing wall...");
       const signatures = await fetchWallSignatures();
 
-      const strokes = signatures.map((s: any) =>
-        decodeSignature(hexToBytes(s.signatureData), CANVAS_SIZE, CANVAS_SIZE)
-      );
+      const strokes = signatures.map((s: any) => {
+        const data =
+          typeof s.signatureData === "string"
+            ? hexToBytes(s.signatureData)
+            : Uint8Array.from(s.signatureData);
+
+        return decodeSignature(data, CANVAS_SIZE, CANVAS_SIZE);
+      });
 
       setWallStrokes(strokes.flat());
       setStatus(null);
@@ -375,7 +380,6 @@ const Canvas = () => {
           </p>
         </div>
 
-        {/* 🎨 выбор цвета */}
         <div style={{ display: "flex", gap: 8 }}>
           {SIGN_COLORS.map((c) => (
             <button
