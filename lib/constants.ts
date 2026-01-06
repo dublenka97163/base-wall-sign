@@ -1,0 +1,1 @@
+export const MAX_SIGNATURES_PER_WALL = 5000;
