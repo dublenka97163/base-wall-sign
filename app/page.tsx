@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   bytesToHex,
+  hexToBytes,
   createPublicClient,
   createWalletClient,
   custom,
@@ -166,7 +167,7 @@ const Canvas = () => {
       const signatures = await fetchWallSignatures();
 
       const strokes = signatures.map((s: any) =>
-        decodeSignature(s.signatureData, CANVAS_SIZE, CANVAS_SIZE)
+        decodeSignature(hexToBytes(s.signatureData), CANVAS_SIZE, CANVAS_SIZE)
       );
 
       setWallStrokes(strokes.flat());
