@@ -26,7 +26,6 @@ import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 
 const CANVAS_SIZE = 820;
 
-/* ✅ лимиты */
 const MAX_POINTS_PER_STROKE = 120;
 const MAX_POINTS_TOTAL = 600;
 
@@ -94,22 +93,34 @@ const ActionButton = ({
 const Canvas = () => {
   const logo = useBaseLogo();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const [localStrokes, setLocalStrokes] = useState<Stroke[]>([]);
   const [wallStrokes, setWallStrokes] = useState<Stroke[]>([]);
   const [pendingStrokes, setPendingStrokes] = useState<Stroke[]>([]);
+  const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
+
   const [isDrawing, setIsDrawing] = useState(false);
+  const [drawLocked, setDrawLocked] = useState(false);
+
   const [status, setStatus] = useState<string | null>(null);
   const [isCasting, setIsCasting] = useState(false);
   const [isLoadingWall, setIsLoadingWall] = useState(false);
-  const pointerStroke = useRef<Stroke | null>(null);
-  const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
   const [signing, setSigning] = useState(false);
+
+  const pointerStroke = useRef<Stroke | null>(null);
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
     null
   );
 
+  const usedPoints = useMemo(() => {
+    const local = localStrokes.reduce((sum, s) => sum + s.points.length, 0);
+    const draft = pointerStroke.current?.points.length ?? 0;
+    return local + draft;
+  }, [localStrokes]);
+
   const chainId = getChainId();
   const chain = chainId === base.id ? base : baseSepolia;
+
   const publicClient = useMemo(
     () =>
       createPublicClient({
@@ -161,15 +172,6 @@ const Canvas = () => {
     syncWall();
   }, [syncWall]);
 
-  useEffect(() => {
-    const sdk = (globalThis as unknown as {
-      miniApp?: { actions?: { ready?: () => Promise<void> } };
-    }).miniApp;
-    sdk?.actions?.ready?.().catch((err: unknown) => {
-      console.warn("Mini app ready signal failed", err);
-    });
-  }, []);
-
   const pointerPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return {
@@ -180,21 +182,35 @@ const Canvas = () => {
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
+
+    if (drawLocked) return;
+
+    if (usedPoints >= MAX_POINTS_TOTAL) {
+      setDrawLocked(true);
+      setStatus("Limit reached. Clear or Confirm & Sign.");
+      return;
+    }
+
     const point = pointerPoint(event);
     pointerStroke.current = { points: [point] };
     setDraftStroke({ points: [point] });
     setIsDrawing(true);
   };
 
-  /* ✅ лимиты точек */
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !pointerStroke.current) return;
+    if (drawLocked) return;
 
-    const totalPoints =
+    const total =
       localStrokes.reduce((sum, s) => sum + s.points.length, 0) +
       pointerStroke.current.points.length;
 
-    if (totalPoints >= MAX_POINTS_TOTAL) return;
+    if (total >= MAX_POINTS_TOTAL) {
+      setDrawLocked(true);
+      setStatus("Limit reached. Clear or Confirm & Sign.");
+      return;
+    }
+
     if (pointerStroke.current.points.length >= MAX_POINTS_PER_STROKE) return;
 
     const point = pointerPoint(event);
@@ -202,7 +218,6 @@ const Canvas = () => {
     setDraftStroke({ points: [...pointerStroke.current.points] });
   };
 
-  /* ✅ фикс исчезающей линии */
   const handlePointerUp = () => {
     const stroke = pointerStroke.current;
     if (stroke && stroke.points.length) {
@@ -217,6 +232,7 @@ const Canvas = () => {
     setLocalStrokes([]);
     setDraftStroke(null);
     pointerStroke.current = null;
+    setDrawLocked(false);
     setStatus(null);
   };
 
@@ -225,23 +241,26 @@ const Canvas = () => {
       setStatus("Draw your signature first.");
       return;
     }
+
     const eth =
       typeof window !== "undefined" ? (window as any).ethereum : null;
     if (!eth) {
       setStatus("Wallet not available in this environment.");
       return;
     }
-    if (!canvasRef.current) return;
 
     try {
       setSigning(true);
+
       const encoded = encodeSignature(localStrokes, CANVAS_SIZE, CANVAS_SIZE);
+
       if (!walletClientRef.current) {
         walletClientRef.current = createWalletClient({
           chain,
           transport: custom(eth),
         });
       }
+
       const addresses: string[] = await eth.request({
         method: "eth_requestAccounts",
       });
@@ -263,6 +282,7 @@ const Canvas = () => {
 
       setPendingStrokes((prev) => [...prev, ...localStrokes]);
       setLocalStrokes([]);
+      setDrawLocked(false);
       setStatus("Submitting signature...");
 
       await publicClient.waitForTransactionReceipt({ hash });
@@ -323,95 +343,50 @@ const Canvas = () => {
           gap: 16,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0, fontSize: 28 }}>Base Wall Sign</h1>
-            <p style={{ margin: "4px 0 0", color: "#475569" }}>
-              Draw on the Base logo, submit onchain, and mint your wall NFT.
-            </p>
-          </div>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 28 }}>Base Wall Sign</h1>
+          <p style={{ margin: "4px 0 0", color: "#475569" }}>
+            Draw on the Base logo, submit onchain, and mint your wall NFT.
+          </p>
         </div>
 
-        <div
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
           style={{
-            border: "1px solid var(--border)",
+            width: "100%",
+            maxWidth: CANVAS_SIZE,
             borderRadius: 18,
-            padding: 16,
+            border: "1px solid #e2e8f0",
+            touchAction: "none",
             background: "#ffffff",
-            boxShadow: "var(--shadow)",
           }}
-        >
-          <div
-            style={{
-              width: "100%",
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_SIZE}
-              height={CANVAS_SIZE}
-              style={{
-                width: "100%",
-                maxWidth: CANVAS_SIZE,
-                borderRadius: 18,
-                border: "1px solid #e2e8f0",
-                touchAction: "none",
-                background: "#ffffff",
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
-            />
-          </div>
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        />
 
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              marginTop: 16,
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <ActionButton
-                variant="secondary"
-                label="Clear"
-                onClick={clearLocal}
-                disabled={!localStrokes.length}
-              />
-              <ActionButton
-                variant="primary"
-                label={signing ? "Signing..." : "Confirm & Sign"}
-                onClick={onSign}
-                disabled={signing || !localStrokes.length}
-              />
-              <ActionButton
-                variant="secondary"
-                label={isCasting ? "Preparing..." : "Cast Wall"}
-                onClick={castWall}
-                disabled={isCasting || isLoadingWall}
-              />
-            </div>
-
-            <div style={{ color: "#475569", fontSize: 14 }}>
-              {isLoadingWall
-                ? "Rebuilding wall from onchain events..."
-                : "Onchain source of truth. Events ordered by block + log index."}
-            </div>
-          </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <ActionButton
+            variant="secondary"
+            label="Clear"
+            onClick={clearLocal}
+            disabled={!localStrokes.length}
+          />
+          <ActionButton
+            variant="primary"
+            label={signing ? "Signing..." : "Confirm & Sign"}
+            onClick={onSign}
+            disabled={signing || !localStrokes.length}
+          />
+          <ActionButton
+            variant="secondary"
+            label={isCasting ? "Preparing..." : "Cast Wall"}
+            onClick={castWall}
+            disabled={isCasting || isLoadingWall}
+          />
         </div>
 
         {status && (
@@ -421,7 +396,6 @@ const Canvas = () => {
               borderRadius: 12,
               border: "1px solid #e2e8f0",
               background: "#f8fafc",
-              color: "#0f172a",
             }}
           >
             {status}
