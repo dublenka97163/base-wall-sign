@@ -29,6 +29,15 @@ const CANVAS_SIZE = 820;
 const MAX_POINTS_PER_STROKE = 120;
 const MAX_POINTS_TOTAL = 600;
 
+/* 🎨 допустимые цвета подписи */
+const SIGN_COLORS = [
+  "#0000ff",
+  "#ffd12f",
+  "#66c800",
+  "#0a0b0d",
+  "#fc401f",
+] as const;
+
 type ButtonProps = {
   label: string;
   onClick: () => void;
@@ -106,6 +115,9 @@ const Canvas = () => {
   const [isCasting, setIsCasting] = useState(false);
   const [isLoadingWall, setIsLoadingWall] = useState(false);
   const [signing, setSigning] = useState(false);
+
+  /* 🎨 текущий выбранный цвет */
+  const [currentColor, setCurrentColor] = useState<string>("#0a0b0d");
 
   const pointerStroke = useRef<Stroke | null>(null);
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
@@ -192,8 +204,14 @@ const Canvas = () => {
     }
 
     const point = pointerPoint(event);
-    pointerStroke.current = { points: [point] };
-    setDraftStroke({ points: [point] });
+    pointerStroke.current = {
+      points: [point],
+      color: currentColor,
+    };
+    setDraftStroke({
+      points: [point],
+      color: currentColor,
+    });
     setIsDrawing(true);
   };
 
@@ -215,7 +233,10 @@ const Canvas = () => {
 
     const point = pointerPoint(event);
     pointerStroke.current.points.push(point);
-    setDraftStroke({ points: [...pointerStroke.current.points] });
+    setDraftStroke({
+      points: [...pointerStroke.current.points],
+      color: pointerStroke.current.color,
+    });
   };
 
   const handlePointerUp = () => {
@@ -348,6 +369,27 @@ const Canvas = () => {
           <p style={{ margin: "4px 0 0", color: "#475569" }}>
             Draw on the Base logo, submit onchain, and mint your wall NFT.
           </p>
+        </div>
+
+        {/* 🎨 выбор цвета */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {SIGN_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCurrentColor(c)}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                border:
+                  currentColor === c
+                    ? "3px solid #0f172a"
+                    : "1px solid #cbd5f5",
+                background: c,
+                cursor: "pointer",
+              }}
+            />
+          ))}
         </div>
 
         <canvas
