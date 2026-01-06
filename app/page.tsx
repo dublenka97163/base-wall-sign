@@ -26,6 +26,10 @@ import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 
 const CANVAS_SIZE = 820;
 
+/* ✅ лимиты */
+const MAX_POINTS_PER_STROKE = 120;
+const MAX_POINTS_TOTAL = 600;
+
 type ButtonProps = {
   label: string;
   onClick: () => void;
@@ -158,7 +162,9 @@ const Canvas = () => {
   }, [syncWall]);
 
   useEffect(() => {
-    const sdk = (globalThis as unknown as { miniApp?: { actions?: { ready?: () => Promise<void> } } }).miniApp;
+    const sdk = (globalThis as unknown as {
+      miniApp?: { actions?: { ready?: () => Promise<void> } };
+    }).miniApp;
     sdk?.actions?.ready?.().catch((err: unknown) => {
       console.warn("Mini app ready signal failed", err);
     });
@@ -180,16 +186,27 @@ const Canvas = () => {
     setIsDrawing(true);
   };
 
+  /* ✅ лимиты точек */
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !pointerStroke.current) return;
+
+    const totalPoints =
+      localStrokes.reduce((sum, s) => sum + s.points.length, 0) +
+      pointerStroke.current.points.length;
+
+    if (totalPoints >= MAX_POINTS_TOTAL) return;
+    if (pointerStroke.current.points.length >= MAX_POINTS_PER_STROKE) return;
+
     const point = pointerPoint(event);
     pointerStroke.current.points.push(point);
     setDraftStroke({ points: [...pointerStroke.current.points] });
   };
 
+  /* ✅ фикс исчезающей линии */
   const handlePointerUp = () => {
-    if (pointerStroke.current) {
-      setLocalStrokes((prev) => [...prev, pointerStroke.current!]);
+    const stroke = pointerStroke.current;
+    if (stroke && stroke.points.length) {
+      setLocalStrokes((prev) => [...prev, stroke]);
     }
     pointerStroke.current = null;
     setDraftStroke(null);
@@ -208,7 +225,8 @@ const Canvas = () => {
       setStatus("Draw your signature first.");
       return;
     }
-    const eth = typeof window !== "undefined" ? (window as any).ethereum : null;
+    const eth =
+      typeof window !== "undefined" ? (window as any).ethereum : null;
     if (!eth) {
       setStatus("Wallet not available in this environment.");
       return;
@@ -356,6 +374,7 @@ const Canvas = () => {
               onPointerLeave={handlePointerUp}
             />
           </div>
+
           <div
             style={{
               display: "flex",
@@ -386,6 +405,7 @@ const Canvas = () => {
                 disabled={isCasting || isLoadingWall}
               />
             </div>
+
             <div style={{ color: "#475569", fontSize: 14 }}>
               {isLoadingWall
                 ? "Rebuilding wall from onchain events..."
