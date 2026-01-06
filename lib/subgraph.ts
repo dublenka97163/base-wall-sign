@@ -1,6 +1,6 @@
 export const WALL_QUERY = `
   query Wall {
-    wallSignatures(orderBy: tokenId, orderDirection: asc) {
+    signeds(orderBy: tokenId, orderDirection: asc) {
       tokenId
       signatureData
     }
@@ -23,5 +23,13 @@ export async function fetchWallSignatures() {
   }
 
   const json = await res.json();
-  return json.data.wallSignatures;
+
+  const data = json.data?.signeds;
+
+  if (!Array.isArray(data)) {
+    console.error("Subgraph response invalid:", json);
+    throw new Error("Invalid subgraph response");
+  }
+
+  return data;
 }
