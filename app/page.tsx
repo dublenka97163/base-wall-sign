@@ -18,11 +18,7 @@ import {
 import { base, baseSepolia } from "viem/chains";
 import { Providers } from "./providers";
 import { useBaseLogo } from "@/lib/useBaseLogo";
-import {
-  Stroke,
-  encodeSignature,
-  decodeSignatureData,
-} from "@/lib/signatureEncoding";
+import { Stroke, encodeSignature, decodeSignature } from "@/lib/signatureEncoding";
 import { drawWallLayers } from "@/lib/draw";
 import { fetchWallSignatures } from "@/lib/subgraph";
 import { contractAbi } from "@/lib/contract";
@@ -170,7 +166,7 @@ const Canvas = () => {
       const signatures = await fetchWallSignatures();
 
       const strokes = signatures.map((s: any) =>
-        decodeSignatureData(s.signatureData)
+        decodeSignature(s.signatureData)
       );
 
       setWallStrokes(strokes.flat());
