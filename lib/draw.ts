@@ -28,10 +28,12 @@ export const drawStroke = (
   const [first, ...rest] = stroke.points;
   ctx.moveTo(first.x, first.y);
 
-  // ✅ FIX: stroke из одной точки (dot)
+  // FIX: stroke из одной точки (dot)
   if (rest.length === 0) {
+    ctx.globalAlpha = 0.75;
     ctx.lineTo(first.x + 0.01, first.y + 0.01);
     ctx.stroke();
+    ctx.globalAlpha = 1;
     return;
   }
 
@@ -47,7 +49,9 @@ export const drawStroke = (
     ctx.quadraticCurveTo(prev.x, prev.y, mid.x, mid.y);
   }
 
+  ctx.globalAlpha = 0.75;
   ctx.stroke();
+  ctx.globalAlpha = 1;
 };
 
 export const drawWallLayers = (
@@ -61,8 +65,8 @@ export const drawWallLayers = (
   ctx.save();
   ctx.clearRect(0, 0, width, height);
 
-  // 1. Белый фон
-  ctx.fillStyle = "#ffffff";
+  // 1. Фон (брендовый светло-серый)
+  ctx.fillStyle = "#eef0f3";
   ctx.fillRect(0, 0, width, height);
 
   // 2. Strokes
@@ -70,7 +74,7 @@ export const drawWallLayers = (
     drawStroke(ctx, stroke);
   });
 
-  // 3. Logo
+  // 3. Logo (всегда читаемое)
   if (logo) {
     const logoWidth = (logo as any).width;
     const logoHeight = (logo as any).height;
@@ -90,7 +94,7 @@ export const drawWallLayers = (
       const x = (width - drawWidth) / 2;
       const y = (height - drawHeight) / 2;
 
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.30;
       ctx.drawImage(logo, x, y, drawWidth, drawHeight);
       ctx.globalAlpha = 1;
     }
