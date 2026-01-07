@@ -107,13 +107,6 @@ const ActionButton = ({
 };
 
 const Canvas = () => {
-  const miniKit = useMiniKit();
-
-  // Signal readiness для Mini App frame (обязательно для правильной загрузки)
-  useEffect(() => {
-    miniKit.setReady();
-  }, [miniKit]);
-
   const logo = useBaseLogo();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [localStrokes, setLocalStrokes] = useState<Stroke[]>([]);
@@ -438,18 +431,27 @@ const Canvas = () => {
           ))}
         </div>
 
-        {/* Connect button (теперь официальный от OnchainKit/MiniKit), Terms и Share */}
+        {/* Connect button, Terms и Share */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
           <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#475569" }}>
             Terms
           </a>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            {/* ОФИЦИАЛЬНЫЙ CONNECT WALLET — native для Farcaster/Base */}
-            <ConnectWallet />
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button
+              className="connect-btn"
+              disabled
+              style={{
+                ...buttonStyles.base,
+                padding: "12px 20px",
+                opacity: 0.7,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+              }}
+            >
+              Wallet connected
+            </button>
             <ActionButton
               label="Share"
               onClick={handleShare}
-              buttonStyle={{ flex: "0 1 auto" }}
             />
           </div>
         </div>
