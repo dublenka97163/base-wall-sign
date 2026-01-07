@@ -1,0 +1,17 @@
+{
+  "short_name": "Base Wall",
+  "name": "Base Wall Sign",
+  "description": "Official Farcaster Mini App to sign the Base wall onchain.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/assets/base-logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

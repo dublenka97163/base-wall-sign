@@ -1,0 +1,537 @@
+"use client";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  bytesToHex,
+  hexToBytes,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  http,
+} from "viem";
+import { base, baseSepolia } from "viem/chains";
+import { Providers } from "./providers";
+import { useBaseLogo } from "@/lib/useBaseLogo";
+import { Stroke, encodeSignature, decodeSignature } from "@/lib/signatureEncoding";
+import { drawWallLayers } from "@/lib/draw";
+import { fetchWallSignatures } from "@/lib/subgraph";
+import { contractAbi } from "@/lib/contract";
+import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
+import { getWallRange } from "@/lib/wall";
+import { ConnectWallet } from "@coinbase/onchainkit/wallet";
+import { useMiniKit } from "@coinbase/onchainkit/minikit";
+
+const CANVAS_SIZE = 820;
+const MAX_POINTS_PER_STROKE = 120;
+const MAX_POINTS_TOTAL = 600;
+
+/* 🎨 допустимые цвета подписи */
+const SIGN_COLORS = [
+  "#0000ff",
+  "#ffd12f",
+  "#66c800",
+  "#0a0b0d",
+  "#fc401f",
+] as const;
+
+type ButtonProps = {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "secondary";
+  buttonStyle?: React.CSSProperties;
+};
+
+const buttonStyles = {
+  base: {
+    border: "1px solid var(--border)",
+    padding: "14px 18px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontWeight: 600,
+    transition: "transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
+    boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
+    cursor: "pointer",
+  },
+  pressed: {
+    transform: "translateY(1px) scale(0.99)",
+    boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
+  },
+  disabled: {
+    opacity: 0.5,
+    cursor: "not-allowed",
+  },
+} as const;
+
+const ActionButton = ({
+  label,
+  onClick,
+  disabled,
+  buttonStyle = {},
+}: ButtonProps) => {
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <button
+      style={{
+        ...buttonStyles.base,
+        flex: "1 1 220px",
+        boxSizing: "border-box",
+        ...buttonStyle,
+        ...(hovered && !disabled
+          ? {
+              transform: "translateY(-2px)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+            }
+          : {}),
+        ...(pressed ? buttonStyles.pressed : {}),
+        ...(disabled ? buttonStyles.disabled : {}),
+      }}
+      disabled={disabled}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+};
+
+const Canvas = () => {
+  const miniKit = useMiniKit();
+
+  // Signal readiness для Mini App frame (обязательно для правильной загрузки)
+  useEffect(() => {
+    miniKit.setReady();
+  }, [miniKit]);
+
+  const logo = useBaseLogo();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [localStrokes, setLocalStrokes] = useState<Stroke[]>([]);
+  const [wallStrokes, setWallStrokes] = useState<Stroke[]>([]);
+  const [pendingStrokes, setPendingStrokes] = useState<Stroke[]>([]);
+  const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawLocked, setDrawLocked] = useState(false);
+  const drawLockedRef = useRef(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [isCasting, setIsCasting] = useState(false);
+  const [signing, setSigning] = useState(false);
+  /* 🎨 текущий выбранный цвет */
+  const [currentColor, setCurrentColor] = useState<string>("#0a0b0d");
+  const pointerStroke = useRef<Stroke | null>(null);
+  const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
+    null
+  );
+
+  const chainId = getChainId();
+  const chain = chainId === base.id ? base : baseSepolia;
+
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain,
+        transport: http(getRpcUrl()),
+      }),
+    [chain]
+  );
+
+  const allStrokes = useMemo(
+    () => [
+      ...wallStrokes,
+      ...pendingStrokes,
+      ...localStrokes,
+      ...(draftStroke ? [draftStroke] : []),
+    ],
+    [draftStroke, localStrokes, pendingStrokes, wallStrokes]
+  );
+
+  const redraw = useCallback(() => {
+    if (!canvasRef.current || !logo) return;
+    const ctx = canvasRef.current.getContext("2d");
+    if (!ctx) return;
+    drawWallLayers(ctx, allStrokes, logo, {
+      width: CANVAS_SIZE,
+      height: CANVAS_SIZE,
+    });
+  }, [allStrokes, logo]);
+
+  useEffect(() => {
+    redraw();
+  }, [redraw]);
+
+  async function fetchLatestTokenId() {
+    const res = await fetch(process.env.NEXT_PUBLIC_SUBGRAPH_URL!, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `
+          query {
+            signeds(orderBy: tokenId, orderDirection: desc, first: 1) {
+              tokenId
+            }
+          }
+        `,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error("Subgraph fetch failed");
+    }
+    const json = await res.json();
+    return Number(json?.data?.signeds?.[0]?.tokenId ?? 0);
+  }
+
+  /* === ЗАГРУЗКА СТЕНЫ ЧЕРЕЗ SUBGRAPH === */
+  const loadWall = useCallback(async () => {
+    try {
+      setStatus("Syncing wall...");
+      const latestTokenId = await fetchLatestTokenId();
+      if (!latestTokenId) {
+        setWallStrokes([]);
+        setStatus(null);
+        return;
+      }
+      const { from, to } = getWallRange(latestTokenId);
+      const signatures = await fetchWallSignatures(from, to);
+      const inRange = signatures.filter((s: any) => {
+        const id = Number(s?.tokenId ?? 0);
+        return id >= from && id <= to;
+      });
+      const strokes = inRange.map((s: any) => {
+        const data =
+          typeof s.signatureData === "string"
+            ? hexToBytes(s.signatureData)
+            : Uint8Array.from(s.signatureData);
+        return decodeSignature(data, CANVAS_SIZE, CANVAS_SIZE);
+      });
+      setWallStrokes(strokes.flat());
+      setStatus(null);
+    } catch (e) {
+      console.error(e);
+      setStatus("Failed to load wall");
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      if (cancelled) return;
+      await loadWall();
+    }
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadWall]);
+
+  const pointerPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * CANVAS_SIZE,
+      y: ((event.clientY - rect.top) / rect.height) * CANVAS_SIZE,
+    };
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    if (drawLockedRef.current || drawLocked) {
+      setStatus("Limit reached. Clear or Confirm & Sign.");
+      return;
+    }
+    const point = pointerPoint(event);
+    pointerStroke.current = {
+      points: [point],
+      color: currentColor,
+    };
+    setDraftStroke({
+      points: [point],
+      color: currentColor,
+    });
+    setIsDrawing(true);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !pointerStroke.current) return;
+    if (drawLockedRef.current || drawLocked) return;
+    const total =
+      localStrokes.reduce((sum, s) => sum + s.points.length, 0) +
+      pointerStroke.current.points.length;
+    if (total >= MAX_POINTS_TOTAL) {
+      drawLockedRef.current = true;
+      setDrawLocked(true);
+      setStatus("Limit reached. Clear or Confirm & Sign.");
+      return;
+    }
+    if (pointerStroke.current.points.length >= MAX_POINTS_PER_STROKE) return;
+    const point = pointerPoint(event);
+    pointerStroke.current.points.push(point);
+    setDraftStroke({
+      points: [...pointerStroke.current.points],
+      color: pointerStroke.current.color,
+    });
+  };
+
+  const handlePointerUp = () => {
+    const stroke = pointerStroke.current;
+    if (stroke && stroke.points.length) {
+      setLocalStrokes((prev) => [...prev, stroke]);
+    }
+    pointerStroke.current = null;
+    setDraftStroke(null);
+    setIsDrawing(false);
+  };
+
+  const clearLocal = () => {
+    setLocalStrokes([]);
+    setDraftStroke(null);
+    pointerStroke.current = null;
+    drawLockedRef.current = false;
+    setDrawLocked(false);
+    setStatus(null);
+  };
+
+  const onSign = async () => {
+    if (!localStrokes.length) {
+      setStatus("Draw your signature first.");
+      return;
+    }
+    const eth =
+      typeof window !== "undefined" ? (window as any).ethereum : null;
+    if (!eth) {
+      setStatus("Wallet not available in this environment.");
+      return;
+    }
+    try {
+      setSigning(true);
+      const encoded = encodeSignature(localStrokes, CANVAS_SIZE, CANVAS_SIZE);
+      if (!walletClientRef.current) {
+        walletClientRef.current = createWalletClient({
+          chain,
+          transport: custom(eth),
+        });
+      }
+      const addresses: string[] = await eth.request({
+        method: "eth_requestAccounts",
+      });
+      const from = addresses[0];
+      const currentChainId = await walletClientRef.current.getChainId();
+      if (currentChainId !== chain.id) {
+        await walletClientRef.current.switchChain({ id: chain.id });
+      }
+      const hash = await walletClientRef.current.writeContract({
+        address: getContractAddress() as `0x${string}`,
+        abi: contractAbi,
+        functionName: "sign",
+        args: [bytesToHex(encoded)],
+        chain,
+        account: from as `0x${string}`,
+      });
+      setPendingStrokes((prev) => [...prev, ...localStrokes]);
+      setLocalStrokes([]);
+      drawLockedRef.current = false;
+      setDrawLocked(false);
+      setStatus("Submitting signature...");
+      await publicClient.waitForTransactionReceipt({ hash });
+      await loadWall();
+      setPendingStrokes([]);
+      setStatus("Signature confirmed onchain!");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to send transaction.";
+      setStatus(message);
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const castWall = async () => {
+    if (!canvasRef.current) return;
+    setIsCasting(true);
+    try {
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvasRef.current!.toBlob(resolve, "image/png")
+      );
+      if (!blob) {
+        setStatus("Failed to prepare wall image.");
+        return;
+      }
+      const file = new File([blob], "base-wall.png", { type: "image/png" });
+      const url = URL.createObjectURL(file);
+      const composer = new URL("https://warpcast.com/~/compose");
+      composer.searchParams.append(
+        "text",
+        "I signed the Base Wall in the Farcaster mini app."
+      );
+      composer.searchParams.append("embeds[]", url);
+      window.open(composer.toString(), "_blank", "noopener,noreferrer");
+      setStatus("Composer opened with wall image attached.");
+    } finally {
+      setIsCasting(false);
+    }
+  };
+
+  const handleShare = useCallback(() => {
+    if (navigator.share) {
+      navigator.share({
+        title: "Base Wall Sign",
+        url: window.location.href,
+      });
+    }
+  }, []);
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "32px 16px",
+        background: "#ffffff",
+      }}
+    >
+      <div
+        style={{
+          width: "min(960px, 100%)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        {/* Новый заголовок */}
+        <div style={{ textAlign: "center", marginBottom: "12px" }}>
+          <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 600, letterSpacing: "-0.02em" }}>
+            Base Wall Sign
+          </h1>
+          <span style={{ display: "block", marginTop: "6px", fontSize: "12px", opacity: 0.6, color: "#475569" }}>
+            Leave your mark onchain
+          </span>
+        </div>
+
+        {/* Палитра цветов */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {SIGN_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCurrentColor(c)}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                border:
+                  currentColor === c
+                    ? "3px solid #0f172a"
+                    : "1px solid #cbd5f5",
+                background: c,
+                cursor: "pointer",
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Connect button (теперь официальный от OnchainKit/MiniKit), Terms и Share */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#475569" }}>
+            Terms
+          </a>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            {/* ОФИЦИАЛЬНЫЙ CONNECT WALLET — native для Farcaster/Base */}
+            <ConnectWallet />
+            <ActionButton
+              label="Share"
+              onClick={handleShare}
+              buttonStyle={{ flex: "0 1 auto" }}
+            />
+          </div>
+        </div>
+
+        {/* Канвас */}
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
+          style={{
+            width: "100%",
+            maxWidth: CANVAS_SIZE,
+            borderRadius: 18,
+            border: "1px solid #e2e8f0",
+            touchAction: "none",
+            background: "#ffffff",
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        />
+
+        {/* Основные кнопки */}
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexDirection: "row",
+            width: "100%",
+            flexWrap: "wrap",
+          }}
+        >
+          <ActionButton
+            label="Clear"
+            onClick={clearLocal}
+            disabled={!localStrokes.length}
+            buttonStyle={{ background: "#ffffff", flex: "0 1 auto" }}
+          />
+          <ActionButton
+            label={signing ? "Signing..." : "Confirm & Sign"}
+            onClick={onSign}
+            disabled={signing || !localStrokes.length}
+            buttonStyle={{ background: "#0000ff", color: "#ffffff", flex: "1 1 0" }}
+          />
+          <ActionButton
+            label={isCasting ? "Preparing..." : "Cast Wall"}
+            onClick={castWall}
+            disabled={isCasting}
+            buttonStyle={{
+              background: "#8A63D2",
+              color: "#ffffff",
+              border: "none",
+              flex: "1 1 0",
+            }}
+          />
+        </div>
+
+        {/* Статус */}
+        {status && (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              background: "#f8fafc",
+            }}
+          >
+            {status}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default function Page() {
+  return (
+    <Providers>
+      <Canvas />
+    </Providers>
+  );
+}

@@ -1,0 +1,15 @@
+{
+  "accountAssociation": {
+    "header": "REPLACE_WITH_HEADER",
+    "payload": "REPLACE_WITH_PAYLOAD",
+    "signature": "REPLACE_WITH_SIGNATURE"
+  },
+  "miniapp": {
+    "name": "Base Wall Sign",
+    "description": "A shared onchain wall where every signature lives forever.",
+    "iconUrl": "https://base-wall-sign.vercel.app/icon.png",
+    "homeUrl": "https://base-wall-sign.vercel.app",
+    "splashImageUrl": "https://base-wall-sign.vercel.app/splash.png",
+    "splashBackgroundColor": "#0A0A0A"
+  }
+}
