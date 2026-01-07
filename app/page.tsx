@@ -29,7 +29,6 @@ const CANVAS_SIZE = 820;
 const MAX_POINTS_PER_STROKE = 120;
 const MAX_POINTS_TOTAL = 600;
 
-/* 🎨 допустимые цвета подписи */
 const SIGN_COLORS = [
   "#0000ff",
   "#ffd12f",
@@ -42,7 +41,6 @@ type ButtonProps = {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  variant?: "primary" | "secondary";
   buttonStyle?: React.CSSProperties;
 };
 
@@ -81,7 +79,8 @@ const ActionButton = ({
     <button
       style={{
         ...buttonStyles.base,
-        flex: "1 1 220px",               // ← минимум ~220px, растягиваются равномерно, wrap на мобильных
+        flex: "1 1 220px",
+        minWidth: "140px",
         boxSizing: "border-box",
         ...buttonStyle,
         ...(hovered && !disabled
@@ -119,8 +118,8 @@ const Canvas = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [isCasting, setIsCasting] = useState(false);
   const [signing, setSigning] = useState(false);
-  /* 🎨 текущий выбранный цвет */
   const [currentColor, setCurrentColor] = useState<string>("#0a0b0d");
+  const [showTerms, setShowTerms] = useState(false);
   const pointerStroke = useRef<Stroke | null>(null);
   const walletClientRef = useRef<ReturnType<typeof createWalletClient> | null>(
     null
@@ -183,7 +182,6 @@ const Canvas = () => {
     return Number(json?.data?.signeds?.[0]?.tokenId ?? 0);
   }
 
-  /* === ЗАГРУЗКА СТЕНЫ ЧЕРЕЗ SUBGRAPH === */
   const loadWall = useCallback(async () => {
     try {
       setStatus("Syncing wall...");
@@ -388,34 +386,58 @@ const Canvas = () => {
           width: "min(960px, 100%)",
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: 32,
+          position: "relative",
         }}
       >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28 }}>Base Wall Sign</h1>
-          <p style={{ margin: "4px 0 0", color: "#475569" }}>
-            Draw on the Base logo, submit onchain, and mint your wall NFT.
-          </p>
+        {/* Шапка по центру */}
+        <div style={{ textAlign: "center" }}>
+          <h1 style={{ margin: 0, fontSize: "28px", fontWeight: 600, letterSpacing: "-0.02em" }}>
+            Base Wall Sign
+          </h1>
+          <span style={{ display: "block", marginTop: "8px", fontSize: "16px", color: "#475569" }}>
+            Leave your mark onchain
+          </span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+
+        {/* Wallet connected — сверху справа */}
+        <div style={{ position: "absolute", top: 16, right: 16 }}>
+          <button
+            disabled
+            style={{
+              padding: "10px 16px",
+              borderRadius: "12px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              color: "#0f172a",
+              fontSize: "14px",
+              fontWeight: 600,
+              opacity: 0.7,
+            }}
+          >
+            Wallet connected
+          </button>
+        </div>
+
+        {/* Палитра цветов */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
           {SIGN_COLORS.map((c) => (
             <button
               key={c}
               onClick={() => setCurrentColor(c)}
               style={{
-                width: 28,
-                height: 28,
+                width: 36,
+                height: 36,
                 borderRadius: "50%",
-                border:
-                  currentColor === c
-                    ? "3px solid #0f172a"
-                    : "1px solid #cbd5f5",
                 background: c,
+                border: currentColor === c ? "4px solid #0f172a" : "2px solid #cbd5e5",
                 cursor: "pointer",
               }}
             />
           ))}
         </div>
+
+        {/* Canvas */}
         <canvas
           ref={canvasRef}
           width={CANVAS_SIZE}
@@ -427,61 +449,123 @@ const Canvas = () => {
             border: "1px solid #e2e8f0",
             touchAction: "none",
             background: "#ffffff",
+            alignSelf: "center",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
         />
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            flexDirection: "row",
-            width: "100%",
-          }}
-        >
+
+        {/* Основные кнопки */}
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
           <ActionButton
-            variant="secondary"
             label="Clear"
             onClick={clearLocal}
             disabled={!localStrokes.length}
-            buttonStyle={{ background: "#ffffff", flex: "0 1 auto" }}
+            buttonStyle={{ background: "#ffffff", flex: "0 1 auto", minWidth: "120px" }}
           />
           <ActionButton
-            variant="primary"
             label={signing ? "Signing..." : "Confirm & Sign"}
             onClick={onSign}
             disabled={signing || !localStrokes.length}
-            buttonStyle={{ background: "#0000ff", flex: "1 1 0" }}
-            }}
+            buttonStyle={{ background: "#0000ff", color: "#ffffff" }}
           />
           <ActionButton
-            variant="secondary"
             label={isCasting ? "Preparing..." : "Cast Wall"}
             onClick={castWall}
             disabled={isCasting}
-            buttonStyle={{
-              background: "#8A63D2",
-              color: "#ffffff",
-              border: "none",
-              flex: "1 1 0",
-            }}
+            buttonStyle={{ background: "#8A63D2", color: "#ffffff", border: "none" }}
           />
         </div>
+
+        {/* Статус */}
         {status && (
           <div
             style={{
-              padding: "12px 14px",
+              padding: "14px 16px",
               borderRadius: 12,
               border: "1px solid #e2e8f0",
               background: "#f8fafc",
+              textAlign: "center",
+              fontSize: "14px",
             }}
           >
             {status}
           </div>
         )}
+
+        {/* Terms снизу */}
+        <div style={{ textAlign: "center" }}>
+          <button
+            onClick={() => setShowTerms(true)}
+            style={{
+              fontSize: "14px",
+              color: "#64748b",
+              background: "none",
+              border: "none",
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            Terms
+          </button>
+        </div>
       </div>
+
+      {/* Модальное окно Terms */}
+      {showTerms && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+          onClick={() => setShowTerms(false)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              padding: "32px",
+              borderRadius: "16px",
+              maxWidth: "420px",
+              width: "90%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowTerms(false)}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                background: "none",
+                border: "none",
+                fontSize: "28px",
+                cursor: "pointer",
+                color: "#64748b",
+              }}
+            >
+              ×
+            </button>
+            <h1 style={{ fontSize: "24px", margin: "0 0 20px 0" }}>Terms of Service</h1>
+            <p style={{ margin: "12px 0", lineHeight: "1.5" }}>
+              This application allows users to create onchain signatures.
+              All actions are irreversible and recorded onchain.
+            </p>
+            <p style={{ margin: "12px 0", lineHeight: "1.5" }}>
+              The app is provided as-is without guarantees.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
