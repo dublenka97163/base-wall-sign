@@ -15,6 +15,7 @@ import {
   custom,
   http,
 } from "viem";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { base, baseSepolia } from "viem/chains";
 import { Providers } from "./providers";
 import { useBaseLogo } from "@/lib/useBaseLogo";
@@ -107,6 +108,9 @@ const ActionButton = ({
 
 const Canvas = () => {
   const logo = useBaseLogo();
+  useEffect(() => {
+    sdk.actions.ready();
+   }, []); 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [localStrokes, setLocalStrokes] = useState<Stroke[]>([]);
   const [wallStrokes, setWallStrokes] = useState<Stroke[]>([]);
