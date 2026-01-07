@@ -24,8 +24,6 @@ import { fetchWallSignatures } from "@/lib/subgraph";
 import { contractAbi } from "@/lib/contract";
 import { getChainId, getContractAddress, getRpcUrl } from "@/lib/env";
 import { getWallRange } from "@/lib/wall";
-import { ConnectWallet } from "@coinbase/onchainkit/wallet";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
 const CANVAS_SIZE = 820;
 const MAX_POINTS_PER_STROKE = 120;
