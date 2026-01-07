@@ -18,8 +18,7 @@
       "social",
       "onchain",
       "community",
-      "farcaster",
-      "drawing"
+      "farcaster"
     ],
     "heroImageUrl": "https://base-wall-sign.vercel.app/preview.png",
     "tagline": "Leave your mark on Base Wall",
@@ -30,7 +29,7 @@
   },
   "accountAssociation": {
     "header": "eyJmaWQiOjE0MTE5NjAsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhjQjY0MkRGNWIyRmUxZDY0NmY5RUJmZGY2OTVmOTI0NzA5MzFFRjY4In0",
-    "payload": "eyJkb21haW4iOiIifQ",
-    "signature": "dWKA95bpF3AE7NW/5VBG8erutxgvt9JSVSopv52asYQDYpprzBSITbI0F4Qy70JiNTPPC5VGy64li1geKX5aJRw="
+    "payload": "eyJkb21haW4iOiJiYXNlLXdhbGwtc2lnbi52ZXJjZWwuYXBwIn0",
+    "signature": "+ctM/LcQUW4ABfXUoz5fun80eKlytQbPcCMq4n4Bo8UupPLty/L+Ka0b1sVhC0ItR5cGeYx1oYBuBD1DvjRRUhs="
   }
 }
