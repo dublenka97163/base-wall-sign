@@ -1,0 +1,36 @@
+{
+  "frame": {
+    "name": "Base Wall Sign",
+    "version": "1",
+    "iconUrl": "https://base-wall-sign.vercel.app/icon.png",
+    "homeUrl": "https://base-wall-sign.vercel.app/",
+    "imageUrl": "https://base-wall-sign.vercel.app/preview.png",
+    "buttonTitle": "Open mini app",
+    "splashImageUrl": "https://base-wall-sign.vercel.app/splash.png",
+    "splashBackgroundColor": "#8A63D2",
+    "subtitle": "On Chain Wall",
+    "description": "A shared onchain wall where each signature is permanently recorded and minted.",
+    "screenshotUrls": [
+      "https://base-wall-sign.vercel.app/preview.png"
+    ],
+    "primaryCategory": "social",
+    "tags": [
+      "social",
+      "onchain",
+      "community",
+      "farcaster",
+      "drawing"
+    ],
+    "heroImageUrl": "https://base-wall-sign.vercel.app/preview.png",
+    "tagline": "Leave your mark on Base Wall",
+    "ogTitle": "Base Wall Sign",
+    "ogDescription": "Draw, sign and submit your mark on Base Wall onchain",
+    "ogImageUrl": "https://base-wall-sign.vercel.app/splash.png",
+    "castShareUrl": "https://base-wall-sign.vercel.app"
+  },
+  "accountAssociation": {
+    "header": "eyJmaWQiOjE0MTE5NjAsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhjQjY0MkRGNWIyRmUxZDY0NmY5RUJmZGY2OTVmOTI0NzA5MzFFRjY4In0",
+    "payload": "eyJkb21haW4iOiIifQ",
+    "signature": "dWKA95bpF3AE7NW/5VBG8erutxgvt9JSVSopv52asYQDYpprzBSITbI0F4Qy70JiNTPPC5VGy64li1geKX5aJRw="
+  }
+}
